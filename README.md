@@ -1,120 +1,111 @@
 # ricebowl
 
-Competition-ready ARC-AGI-3 agents for [ARC Prize 2026](https://arcprize.org/competitions/2026).
+Competition agent for [ARC Prize 2026](https://arcprize.org/competitions/2026/arc-agi-3) (ARC-AGI-3).
 
-## Setup
+Combines the top two approaches from the developer preview:
+- **1st place (12.58%)**: CNN that learns which actions change the game state
+- **3rd place (~similar post-bugfix)**: Systematic graph-based state exploration
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Copy `.env.example` to `.env` and fill in your keys
-3. Run an agent:
-
-```bash
-# === COMPETITION-READY (no internet needed) ===
-
-# Programmatic explorer - no LLM needed at all
-uv run main.py --agent=explorer --game=ls20 --offline
-
-# Local LLM agent - requires local model server (ollama/vLLM/SGLang)
-uv run main.py --agent=local --game=ls20 --offline
-
-# Hybrid agent - grid analysis + local LLM (best performance)
-uv run main.py --agent=hybrid --game=ls20 --offline
-
-# === DEVELOPMENT (uses API credits) ===
-
-# Claude Sonnet - observe + reason + act
-uv run main.py --agent=claude --game=ls20
-
-# Random baseline
-uv run main.py --agent=random --game=ls20 --offline
-```
-
-## Agents
-
-### Competition-Ready (no internet required)
-
-| Agent | Needs LLM? | Description |
-|-------|-----------|-------------|
-| `explorer` | No | Programmatic grid analysis, change detection, systematic exploration |
-| `local` | Local model | OpenAI-compatible API (ollama/vLLM/SGLang) with tool calling |
-| `localfast` | Local model | Same as `local` but skips observation step |
-| `hybrid` | Local model | **Best agent** - programmatic analysis feeds compact summaries to local LLM |
-
-### Development (API credits)
-
-| Agent | Model | Description |
-|-------|-------|-------------|
-| `claude` | Claude Sonnet | Full observe-reason-act loop via Anthropic API |
-| `claudefast` | Claude Haiku | Fast, skips observation |
-| `claudeopus` | Claude Opus | Maximum reasoning power |
-| `random` | N/A | Random baseline |
-
-## Local Model Setup
-
-For competition agents, you need a local model server. Recommended setup:
+## Quick Start
 
 ```bash
-# Option 1: Ollama (easiest)
-ollama pull qwen2.5:32b-instruct
-ollama serve
+# Install uv: https://docs.astral.sh/uv/getting-started/installation/
+cp .env.example .env  # Add your ARC_API_KEY
 
-# Option 2: SGLang (fastest - has prefix caching)
-pip install sglang
-python -m sglang.launch_server --model Qwen/Qwen2.5-32B-Instruct --port 8000
-
-# Option 3: vLLM
-pip install vllm
-vllm serve Qwen/Qwen2.5-32B-Instruct --port 8000
+# Run the competition agent
+uv run main.py --agent=graphcnn --game=ls20 --offline
 ```
 
-Configure in `.env`:
-```
-LOCAL_LLM_BASE_URL=http://localhost:11434/v1   # ollama default
-LOCAL_LLM_MODEL=qwen2.5:32b-instruct
-LOCAL_LLM_API_KEY=ollama
-```
+## The Competition Agent (`graphcnn`)
 
-**Recommended model**: Qwen2.5-32B-Instruct fits in 32GB VRAM at Q5 quantization
-with ~40-60 tok/s on RTX 5090. Strong tool calling and spatial reasoning.
+This is the agent designed for the ARC Prize 2026 leaderboard.
 
-## Architecture
+### Architecture
 
 ```
-agents/
-├── agent.py              # Base Agent + Playback
-├── swarm.py              # Multi-game orchestration
-├── recorder.py           # Session recording (JSONL)
-├── tracing.py            # AgentOps integration
-└── templates/
-    ├── explorer_agent.py  # Programmatic: grid analysis + systematic exploration
-    ├── hybrid_agent.py    # Hybrid: grid analysis → compact summary → local LLM
-    ├── local_llm_agent.py # Local LLM: OpenAI-compatible API with tool use
-    ├── claude_agent.py    # Claude API agent (development)
-    └── random_agent.py    # Random baseline
+┌─────────────────────────────────────────────────┐
+│  Game Environment (64x64 grid, 16 colors)       │
+│  Actions: UP/DOWN/LEFT/RIGHT/INTERACT/CLICK     │
+└──────────────────────┬──────────────────────────┘
+                       │ frame
+          ┌────────────▼────────────┐
+          │  Frame Analyzer         │
+          │  - Connected components │
+          │  - Player detection     │
+          │  - Priority scoring     │
+          └────┬──────────┬─────────┘
+               │          │
+    ┌──────────▼──┐  ┌────▼──────────────┐
+    │ State Graph │  │ CNN Predictor      │
+    │ - Hash      │  │ - 4-layer CNN      │
+    │   states    │  │ - Predicts: will   │
+    │ - Track     │  │   this action      │
+    │   frontier  │  │   change state?    │
+    │ - Shortest  │  │ - Spatial heatmap  │
+    │   paths     │  │   for click targets│
+    │ - Loop      │  │ - Trains online    │
+    │   detection │  │   from experience  │
+    └──────┬──────┘  └────────┬───────────┘
+           │                  │
+      ┌────▼──────────────────▼────┐
+      │  Action Selection          │
+      │  1. Replay queue (nav)     │
+      │  2. ε-random exploration   │
+      │  3. CNN-guided untested    │
+      │  4. Navigate to frontier   │
+      │  5. CNN exploitation       │
+      └───────────────────────────┘
 ```
 
-### How the Hybrid Agent Works
+### How It Works
 
-1. **GridAnalyzer** extracts structured features from the 64x64 grid:
-   - Player position detection via movement diff analysis
-   - Object detection (connected components by color)
-   - Wall mapping from failed movement attempts
-   - Status row parsing (energy, score, level info)
+1. **State Graph**: Every frame is hashed into a compact state ID. Actions create edges.
+   The graph tracks which actions have been tried at each state, detects loops, and finds
+   shortest paths to "frontier" states (states with untested actions).
 
-2. **Compact summary** sent to the local LLM instead of raw grid data:
-   - "3 cells changed, player moved to (25,30), 4 objects visible, nearest is color=6 at dist=8"
-   - Dramatically reduces tokens vs. sending all 4096 cells
+2. **CNN Action Predictor**: A 4-layer CNN (input: 16-channel one-hot 64x64 grid) predicts
+   whether each action will change the game state. Trained online from an experience buffer
+   of ~200K deduplicated (state, action, did_change) tuples. Two output heads: sigmoid probs
+   for ACTION1-5, and a 64x64 spatial heatmap for ACTION6 click targets.
 
-3. **Local LLM** receives pre-digested analysis and picks actions via tool calling
+3. **Action Selection**: Prioritizes untested actions at the current state (CNN picks the most
+   promising). When a state is fully explored, navigates to the nearest frontier state via
+   shortest path. Falls back to component-priority analysis when CNN hasn't trained enough.
 
-4. **Cross-death learning**: action history and wall maps persist across GAME_OVERs
+4. **Adaptation**: CNN resets weights on level changes. Player position tracked via movement
+   diff detection. Status bars masked from state hashing to avoid state explosion.
 
-## Costs
+### Why Not LLMs?
 
-| Component | Cost |
-|-----------|------|
-| ARC-AGI-3 games | Free (runs locally) |
-| `explorer` agent | Free (no LLM) |
-| `local`/`hybrid` agents | Free (your own GPU) |
-| `claude` agents | Your Anthropic API credits |
-| Competition submissions | RTX 5090, 8 hours, no internet |
+Frontier LLMs score **under 1%** on ARC-AGI-3 (GPT-5.4: 0.26%, Claude Opus: 0.25%).
+The 1st place CNN scored 12.58%. LLMs fail because:
+- They can't do systematic state-space exploration
+- They waste actions (RHAE scoring penalizes quadratically: 10x human actions = 1% credit)
+- They can't build world models from interaction
+- Duke testing: Claude Opus scores 97% with hand-crafted scaffolding, 0% on unfamiliar games
+
+## All Agents
+
+| Agent | Type | Description |
+|-------|------|-------------|
+| **`graphcnn`** | Competition | Graph search + CNN (best agent) |
+| `explorer` | Programmatic | Grid analysis + systematic exploration (no ML) |
+| `hybrid` | Local LLM | Grid analysis feeds local LLM via OpenAI-compatible API |
+| `local` | Local LLM | Direct local LLM with tool calling |
+| `claude` | API | Claude Sonnet via Anthropic API |
+| `random` | Baseline | Random actions |
+
+## Local Model Setup (for `hybrid`/`local` agents)
+
+```bash
+ollama pull qwen2.5:32b-instruct && ollama serve
+# Then: uv run main.py --agent=hybrid --game=ls20 --offline
+```
+
+## Scoring (RHAE)
+
+ARC-AGI-3 uses Relative Human Action Efficiency:
+- Score = (human_actions / AI_actions)^2
+- Hard cutoff at 5x human actions
+- 10x more actions than human = only 1% credit
+- This is why systematic exploration beats brute-force LLM reasoning

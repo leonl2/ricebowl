@@ -3,6 +3,7 @@ from typing import Type, cast
 from dotenv import load_dotenv
 
 from .agent import Agent, Playback
+from .competition.graph_cnn_agent import GraphCNNAgent
 from .recorder import Recorder
 from .swarm import Swarm
 from .templates.claude_agent import ClaudeAgent, ClaudeFast, ClaudeOpus
@@ -20,14 +21,15 @@ AVAILABLE_AGENTS: dict[str, Type[Agent]] = {
 }
 
 # Register all agent variants explicitly
-AVAILABLE_AGENTS["claude"] = ClaudeAgent
-AVAILABLE_AGENTS["claudefast"] = ClaudeFast
-AVAILABLE_AGENTS["claudeopus"] = ClaudeOpus
 AVAILABLE_AGENTS["random"] = Random
 AVAILABLE_AGENTS["explorer"] = Explorer
 AVAILABLE_AGENTS["local"] = LocalLLMAgent
 AVAILABLE_AGENTS["localfast"] = LocalLLMFast
 AVAILABLE_AGENTS["hybrid"] = HybridAgent
+AVAILABLE_AGENTS["claude"] = ClaudeAgent
+AVAILABLE_AGENTS["claudefast"] = ClaudeFast
+AVAILABLE_AGENTS["claudeopus"] = ClaudeOpus
+AVAILABLE_AGENTS["graphcnn"] = GraphCNNAgent  # Competition agent
 
 # Add all the recording files as valid agent names
 for rec in Recorder.list():
@@ -36,13 +38,14 @@ for rec in Recorder.list():
 __all__ = [
     "Swarm",
     "Random",
-    "ClaudeAgent",
-    "ClaudeFast",
-    "ClaudeOpus",
     "Explorer",
     "LocalLLMAgent",
     "LocalLLMFast",
     "HybridAgent",
+    "ClaudeAgent",
+    "ClaudeFast",
+    "ClaudeOpus",
+    "GraphCNNAgent",
     "Agent",
     "Recorder",
     "Playback",

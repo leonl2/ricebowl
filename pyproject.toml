@@ -1,7 +1,7 @@
 [project]
 name = "ricebowl"
-version = "0.2.0"
-description = "ARC-AGI-3 Agents - competition-ready with Claude, local LLM, and programmatic agents"
+version = "0.3.0"
+description = "ARC-AGI-3 competition agent: graph search + CNN action predictor"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,6 +11,7 @@ dependencies = [
     "openai>=1.72.0",
     "pydantic>=2.11.7",
     "requests>=2.32.4",
+    "torch>=2.5.0",
 ]
 
 [dependency-groups]
