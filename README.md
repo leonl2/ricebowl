@@ -6,23 +6,32 @@ ARC-AGI-3 agent powered by Claude.
 
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
 2. Copy `.env.example` to `.env` and fill in your API keys:
-   - `ARC_API_KEY` - get one at https://three.arcprize.org
-   - `ANTHROPIC_API_KEY` - your Anthropic API key
+   - `ANTHROPIC_API_KEY` - your Anthropic API key (required for Claude agents)
+   - `ARC_API_KEY` - get one free at https://three.arcprize.org (optional, for online scorecards)
 3. Run an agent:
 
 ```bash
-# Run the Claude agent on the ls20 game
+# Run locally (no ARC API key needed, no scorecards)
+uv run main.py --agent=claude --game=ls20 --offline
+
+# Run the random baseline (no LLM key needed either)
+uv run main.py --agent=random --game=ls20 --offline
+
+# Run online (gets scorecards + replays, needs ARC_API_KEY)
 uv run main.py --agent=claude --game=ls20
 
-# Run the fast Claude agent (Haiku, no observation step)
+# Fast Claude agent (Haiku, no observation step)
 uv run main.py --agent=claudefast --game=ls20
 
-# Run Claude Opus (maximum reasoning)
+# Claude Opus (maximum reasoning)
 uv run main.py --agent=claudeopus --game=ls20
-
-# Run the random baseline agent
-uv run main.py --agent=random --game=ls20
 ```
+
+## Costs
+
+- **ARC-AGI-3 game access**: Free. Games run locally via the `arc-agi` toolkit.
+- **LLM API calls**: Uses your own Anthropic API key/credits. The `random` agent needs no LLM.
+- **Competition submissions**: Run offline on Kaggle with no internet ($50 compute budget).
 
 ## Agents
 

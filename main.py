@@ -46,7 +46,18 @@ def main() -> None:
         default=[],
         help="Tags for the scorecard",
     )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        default=False,
+        help="Run in offline mode (no ARC API key needed, no scorecards)",
+    )
     args = parser.parse_args()
+
+    # Set operation mode env var before importing agents
+    if args.offline:
+        os.environ["ONLINE_ONLY"] = "False"
+        os.environ["ARC_OPERATION_MODE"] = "OFFLINE"
 
     ROOT_URL = os.getenv("ARC_BASE_URL", "https://three.arcprize.org")
 
@@ -65,7 +76,8 @@ def main() -> None:
         # Default to ls20 if no game specified
         games = ["ls20"]
 
-    print(f"Starting agent '{agent_name}' on games: {games}")
+    mode = "OFFLINE" if args.offline else "ONLINE"
+    print(f"Starting agent '{agent_name}' on games: {games} (mode: {mode})")
     print(f"API URL: {ROOT_URL}")
 
     swarm = Swarm(
