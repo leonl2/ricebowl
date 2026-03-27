@@ -1,53 +1,120 @@
 # ricebowl
 
-ARC-AGI-3 agent powered by Claude.
+Competition-ready ARC-AGI-3 agents for [ARC Prize 2026](https://arcprize.org/competitions/2026).
 
 ## Setup
 
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Copy `.env.example` to `.env` and fill in your API keys:
-   - `ANTHROPIC_API_KEY` - your Anthropic API key (required for Claude agents)
-   - `ARC_API_KEY` - get one free at https://three.arcprize.org (optional, for online scorecards)
+2. Copy `.env.example` to `.env` and fill in your keys
 3. Run an agent:
 
 ```bash
-# Run locally (no ARC API key needed, no scorecards)
-uv run main.py --agent=claude --game=ls20 --offline
+# === COMPETITION-READY (no internet needed) ===
 
-# Run the random baseline (no LLM key needed either)
-uv run main.py --agent=random --game=ls20 --offline
+# Programmatic explorer - no LLM needed at all
+uv run main.py --agent=explorer --game=ls20 --offline
 
-# Run online (gets scorecards + replays, needs ARC_API_KEY)
+# Local LLM agent - requires local model server (ollama/vLLM/SGLang)
+uv run main.py --agent=local --game=ls20 --offline
+
+# Hybrid agent - grid analysis + local LLM (best performance)
+uv run main.py --agent=hybrid --game=ls20 --offline
+
+# === DEVELOPMENT (uses API credits) ===
+
+# Claude Sonnet - observe + reason + act
 uv run main.py --agent=claude --game=ls20
 
-# Fast Claude agent (Haiku, no observation step)
-uv run main.py --agent=claudefast --game=ls20
-
-# Claude Opus (maximum reasoning)
-uv run main.py --agent=claudeopus --game=ls20
+# Random baseline
+uv run main.py --agent=random --game=ls20 --offline
 ```
-
-## Costs
-
-- **ARC-AGI-3 game access**: Free. Games run locally via the `arc-agi` toolkit.
-- **LLM API calls**: Uses your own Anthropic API key/credits. The `random` agent needs no LLM.
-- **Competition submissions**: Run offline on Kaggle with no internet ($50 compute budget).
 
 ## Agents
 
+### Competition-Ready (no internet required)
+
+| Agent | Needs LLM? | Description |
+|-------|-----------|-------------|
+| `explorer` | No | Programmatic grid analysis, change detection, systematic exploration |
+| `local` | Local model | OpenAI-compatible API (ollama/vLLM/SGLang) with tool calling |
+| `localfast` | Local model | Same as `local` but skips observation step |
+| `hybrid` | Local model | **Best agent** - programmatic analysis feeds compact summaries to local LLM |
+
+### Development (API credits)
+
 | Agent | Model | Description |
 |-------|-------|-------------|
-| `claude` | Claude Sonnet | Observes state, reasons, then picks actions via tool use |
-| `claudefast` | Claude Haiku | Skips observation step for speed |
+| `claude` | Claude Sonnet | Full observe-reason-act loop via Anthropic API |
+| `claudefast` | Claude Haiku | Fast, skips observation |
 | `claudeopus` | Claude Opus | Maximum reasoning power |
-| `random` | N/A | Random action baseline |
+| `random` | N/A | Random baseline |
 
-## How it works
+## Local Model Setup
 
-Each agent plays ARC-AGI-3 games - turn-based 2D grid environments where the agent must figure out the rules and objectives by interacting with the environment. There are no instructions given.
+For competition agents, you need a local model server. Recommended setup:
 
-The Claude agent:
-1. Observes the 64x64 grid state
-2. Reasons about what it sees (player position, objects, patterns)
-3. Uses tool_use to select an action (move, interact, or click)
-4. Learns from how the grid changes after each action
+```bash
+# Option 1: Ollama (easiest)
+ollama pull qwen2.5:32b-instruct
+ollama serve
+
+# Option 2: SGLang (fastest - has prefix caching)
+pip install sglang
+python -m sglang.launch_server --model Qwen/Qwen2.5-32B-Instruct --port 8000
+
+# Option 3: vLLM
+pip install vllm
+vllm serve Qwen/Qwen2.5-32B-Instruct --port 8000
+```
+
+Configure in `.env`:
+```
+LOCAL_LLM_BASE_URL=http://localhost:11434/v1   # ollama default
+LOCAL_LLM_MODEL=qwen2.5:32b-instruct
+LOCAL_LLM_API_KEY=ollama
+```
+
+**Recommended model**: Qwen2.5-32B-Instruct fits in 32GB VRAM at Q5 quantization
+with ~40-60 tok/s on RTX 5090. Strong tool calling and spatial reasoning.
+
+## Architecture
+
+```
+agents/
+├── agent.py              # Base Agent + Playback
+├── swarm.py              # Multi-game orchestration
+├── recorder.py           # Session recording (JSONL)
+├── tracing.py            # AgentOps integration
+└── templates/
+    ├── explorer_agent.py  # Programmatic: grid analysis + systematic exploration
+    ├── hybrid_agent.py    # Hybrid: grid analysis → compact summary → local LLM
+    ├── local_llm_agent.py # Local LLM: OpenAI-compatible API with tool use
+    ├── claude_agent.py    # Claude API agent (development)
+    └── random_agent.py    # Random baseline
+```
+
+### How the Hybrid Agent Works
+
+1. **GridAnalyzer** extracts structured features from the 64x64 grid:
+   - Player position detection via movement diff analysis
+   - Object detection (connected components by color)
+   - Wall mapping from failed movement attempts
+   - Status row parsing (energy, score, level info)
+
+2. **Compact summary** sent to the local LLM instead of raw grid data:
+   - "3 cells changed, player moved to (25,30), 4 objects visible, nearest is color=6 at dist=8"
+   - Dramatically reduces tokens vs. sending all 4096 cells
+
+3. **Local LLM** receives pre-digested analysis and picks actions via tool calling
+
+4. **Cross-death learning**: action history and wall maps persist across GAME_OVERs
+
+## Costs
+
+| Component | Cost |
+|-----------|------|
+| ARC-AGI-3 games | Free (runs locally) |
+| `explorer` agent | Free (no LLM) |
+| `local`/`hybrid` agents | Free (your own GPU) |
+| `claude` agents | Your Anthropic API credits |
+| Competition submissions | RTX 5090, 8 hours, no internet |

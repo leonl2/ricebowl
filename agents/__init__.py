@@ -6,6 +6,9 @@ from .agent import Agent, Playback
 from .recorder import Recorder
 from .swarm import Swarm
 from .templates.claude_agent import ClaudeAgent, ClaudeFast, ClaudeOpus
+from .templates.explorer_agent import Explorer
+from .templates.hybrid_agent import HybridAgent
+from .templates.local_llm_agent import LocalLLMAgent, LocalLLMFast
 from .templates.random_agent import Random
 
 load_dotenv()
@@ -16,11 +19,15 @@ AVAILABLE_AGENTS: dict[str, Type[Agent]] = {
     if cls.__name__ != "Playback"
 }
 
-# Register Claude agent variants explicitly
+# Register all agent variants explicitly
 AVAILABLE_AGENTS["claude"] = ClaudeAgent
 AVAILABLE_AGENTS["claudefast"] = ClaudeFast
 AVAILABLE_AGENTS["claudeopus"] = ClaudeOpus
 AVAILABLE_AGENTS["random"] = Random
+AVAILABLE_AGENTS["explorer"] = Explorer
+AVAILABLE_AGENTS["local"] = LocalLLMAgent
+AVAILABLE_AGENTS["localfast"] = LocalLLMFast
+AVAILABLE_AGENTS["hybrid"] = HybridAgent
 
 # Add all the recording files as valid agent names
 for rec in Recorder.list():
@@ -32,6 +39,10 @@ __all__ = [
     "ClaudeAgent",
     "ClaudeFast",
     "ClaudeOpus",
+    "Explorer",
+    "LocalLLMAgent",
+    "LocalLLMFast",
+    "HybridAgent",
     "Agent",
     "Recorder",
     "Playback",

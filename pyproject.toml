@@ -1,14 +1,14 @@
 [project]
 name = "ricebowl"
-version = "0.1.0"
-description = "ARC-AGI-3 Agent powered by Claude"
+version = "0.2.0"
+description = "ARC-AGI-3 Agents - competition-ready with Claude, local LLM, and programmatic agents"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "anthropic>=0.52.0",
     "arc-agi>=0.9.1",
     "dotenv>=0.9.9",
     "numpy>=2.3.2",
+    "openai>=1.72.0",
     "pydantic>=2.11.7",
     "requests>=2.32.4",
 ]
@@ -20,6 +20,9 @@ dev = [
 ]
 
 [project.optional-dependencies]
+claude = [
+    "anthropic>=0.52.0",
+]
 agentops = [
     "agentops>=0.4.18",
 ]
